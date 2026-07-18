@@ -1,0 +1,4 @@
+streamlit
+newsapi-python
+transformers
+pandas
