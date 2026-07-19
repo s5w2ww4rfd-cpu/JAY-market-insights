@@ -2,6 +2,7 @@ import pandas as pd
 from newsapi import NewsApiClient
 from transformers import pipeline
 import streamlit as st
+import datetime
 
 # Set page config
 st.set_page_config(page_title="JAY Market Insights", layout="wide")
@@ -16,6 +17,14 @@ def load_model():
     return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
 
 sentiment_model = load_model()
+
+# Function to check if market is open
+def market_open_now():
+    now = datetime.datetime.utcnow()
+    weekday = now.weekday()  # 0=Monday, 6=Sunday
+    hour = now.hour
+    # Forex closes Friday 22:00 UTC, opens Sunday 22:00 UTC
+    return not (weekday == 5 and hour >= 22 or weekday == 6 and hour < 22)
 
 # Function to map sentiment to trading pairs
 def map_to_pairs(headline, result):
@@ -60,6 +69,13 @@ example_prices = {
 def get_current_price(pair):
     """Get current price for a trading pair"""
     return example_prices.get(pair, 0)
+
+# Display market status
+market_status = market_open_now()
+if market_status:
+    st.success("🟢 **FOREX MARKET IS OPEN**")
+else:
+    st.warning("🔴 **FOREX MARKET IS CLOSED**")
 
 # Connect with your API key
 try:
