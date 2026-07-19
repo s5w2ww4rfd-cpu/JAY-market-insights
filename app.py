@@ -346,3 +346,118 @@ try:
 except Exception as e:
     st.error(f"Error: {e}")
     st.info("Please check your API key is correct")
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+
+# --- Helper: pip calculation ---
+def pip_difference(pair, entry, exit):
+    if "JPY" in pair:
+        return (exit - entry) * 100   # 1 pip = 0.01
+    elif "XAU" in pair:
+        return exit - entry           # treat 1 unit = 1 pip
+    else:
+        return (exit - entry) * 10000 # 1 pip = 0.0001
+
+# --- Streamlit UI ---
+st.title("Strategy Backtest Results")
+
+# Timeframe selector (default daily, but 15m/5m available)
+timeframe = st.selectbox("Select timeframe", ["1d", "15m", "5m"], index=0)
+
+# Manual signal input form
+with st.form("signal_form"):
+    date = st.date_input("Signal Date")
+    signal = st.selectbox("Signal", ["BUY", "SELL"])
+    pair = st.selectbox("Pair", ["EURUSD", "USDJPY", "GBPUSD", "XAUUSD"])
+    stop_loss = st.number_input("Stop Loss", value=0.0)
+    take_profit = st.number_input("Take Profit", value=0.0)
+    submitted = st.form_submit_button("Add Signal")
+
+# Store signals
+if "signals" not in st.session_state:
+    st.session_state.signals = pd.DataFrame(columns=["date","signal","pair","stop_loss","take_profit"])
+
+if submitted:
+    new_signal = pd.DataFrame([{
+        "date": pd.to_datetime(date),
+        "signal": signal,
+        "pair": pair,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit
+    }])
+    st.session_state.signals = pd.concat([st.session_state.signals, new_signal], ignore_index=True)
+
+st.write("Signals Table", st.session_state.signals)
+
+# --- Run Backtest ---
+if st.button("Run Backtest") and not st.session_state.signals.empty:
+    # Download data for pairs
+    pairs = {
+        "EURUSD": "EURUSD=X",
+        "USDJPY": "USDJPY=X",
+        "GBPUSD": "GBPUSD=X",
+        "XAUUSD": "GC=F"
+    }
+    data = {}
+    for pair, ticker in pairs.items():
+        df = yf.download(ticker, start="2026-01-01", end="2026-12-31", interval=timeframe)
+        df.index = pd.to_datetime(df.index)
+        data[pair] = df
+
+    lookahead = 5
+    results, days_to_result, pip_results = [], [], []
+
+    for _, row in st.session_state.signals.iterrows():
+        pair_data = data.get(row['pair'])
+        if row['date'] in pair_data.index:
+            start_idx = pair_data.index.get_loc(row['date'])
+            end_idx = min(start_idx + lookahead, len(pair_data)-1)
+            window = pair_data.iloc[start_idx:end_idx+1]
+
+            outcome, days_taken, pip_value = "HOLD", None, 0
+            entry_price = pair_data.loc[row['date'], 'Open']
+
+            for i, (idx, day) in enumerate(window.iterrows()):
+                high, low = day['High'], day['Low']
+                if row['signal'] == "BUY":
+                    if high >= row['take_profit']:
+                        outcome, days_taken = "WIN", i
+                        pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
+                        break
+                    elif low <= row['stop_loss']:
+                        outcome, days_taken = "LOSS", i
+                        pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
+                        break
+                elif row['signal'] == "SELL":
+                    if low <= row['take_profit']:
+                        outcome, days_taken = "WIN", i
+                        pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
+                        break
+                    elif high >= row['stop_loss']:
+                        outcome, days_taken = "LOSS", i
+                        pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
+                        break
+
+            results.append(outcome)
+            days_to_result.append(days_taken)
+            pip_results.append(pip_value)
+        else:
+            results.append("NO DATA")
+            days_to_result.append(None)
+            pip_results.append(0)
+
+    st.session_state.signals['result'] = results
+    st.session_state.signals['days_to_result'] = days_to_result
+    st.session_state.signals['pips'] = pip_results
+
+    st.write("Backtest Results", st.session_state.signals)
+
+    # Stats
+    st.subheader("Backtest Statistics")
+    st.write("Win rate:", (st.session_state.signals['result'] == "WIN").mean())
+    st.write("Loss rate:", (st.session_state.signals['result'] == "LOSS").mean())
+    st.write("Hold rate:", (st.session_state.signals['result'] == "HOLD").mean())
+    st.write("Average pips per WIN:", st.session_state.signals.loc[st.session_state.signals['result']=="WIN", 'pips'].mean())
+    st.write("Average pips per LOSS:", st.session_state.signals.loc[st.session_state.signals['result']=="LOSS", 'pips'].mean())
+    st.write("Net average pips per trade:", st.session_state.signals['pips'].mean())
