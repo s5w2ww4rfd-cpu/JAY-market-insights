@@ -26,6 +26,15 @@ def map_to_pairs(headline, result):
     }
     return pairs_map.get(label, [])
 
+# Example logic to add Buy/Sell column
+def get_trade_signal(sentiment, pairs):
+    if sentiment == "POSITIVE":
+        return "🟢 BUY " + ", ".join(pairs)
+    elif sentiment == "NEGATIVE":
+        return "🔴 SELL " + ", ".join(pairs)
+    else:
+        return "⏸️ HOLD"
+
 # Connect with your API key
 try:
     newsapi = NewsApiClient(api_key="f8665eb595e943a7bbbe1e05ecf32730")
@@ -52,9 +61,14 @@ try:
             "Source": a['source']['name']
         })
 
-    # Display as beautiful table
-    st.subheader("📰 Latest Market News")
+    # Create dataframe
     df = pd.DataFrame(results)
+    
+    # Add trading signal column
+    df["Signal"] = df.apply(lambda row: get_trade_signal(row["Sentiment"], row["Suggested Pairs"].split(", ") if row["Suggested Pairs"] != "N/A" else []), axis=1)
+
+    # Display as beautiful table
+    st.subheader("📰 Latest Market News & Trading Signals")
     st.dataframe(df, use_container_width=True)
 
     # Show statistics
@@ -63,11 +77,11 @@ try:
     
     with col1:
         positive = len(df[df['Sentiment'] == 'POSITIVE'])
-        st.metric("Positive News", positive)
+        st.metric("🟢 Buy Signals", positive)
     
     with col2:
         negative = len(df[df['Sentiment'] == 'NEGATIVE'])
-        st.metric("Negative News", negative)
+        st.metric("🔴 Sell Signals", negative)
     
     with col3:
         avg_conf = df['Confidence'].mean()
