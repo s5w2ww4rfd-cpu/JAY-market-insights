@@ -391,7 +391,7 @@ if submitted:
 st.write("Signals Table", st.session_state.signals)
 
 # --- Run Backtest ---
-:if st.button("Run Backtest", key="run_backtest") and not st.session_state.signals.empty:
+if st.button("Run Backtest", key="run_backtest") and not st.session_state.signals.empty:
     # backtest code goes here
     # Download data for pairs
     pairs = {
