@@ -391,7 +391,8 @@ if submitted:
 st.write("Signals Table", st.session_state.signals)
 
 # --- Run Backtest ---
-if st.button("Run Backtest") and not st.session_state.signals.empty:
+:if st.button("Run Backtest", key="run_backtest") and not st.session_state.signals.empty:
+
     # Download data for pairs
     pairs = {
         "EURUSD": "EURUSD=X",
@@ -461,3 +462,21 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
     st.write("Average pips per WIN:", st.session_state.signals.loc[st.session_state.signals['result']=="WIN", 'pips'].mean())
     st.write("Average pips per LOSS:", st.session_state.signals.loc[st.session_state.signals['result']=="LOSS", 'pips'].mean())
     st.write("Net average pips per trade:", st.session_state.signals['pips'].mean())
+# --- Manual signal input form ---
+# ---- Manual signal input form ----
+with st.form("signal_form"):
+    date = st.date_input("Signal Date")
+    signal = st.selectbox("Signal", ["BUY", "SELL"])
+    pair = st.selectbox("Pair", ["EURUSD", "USDJPY", "GBPUSD", "XAUUSD"])
+    stop_loss = st.number_input("Stop Loss", value=0.0)
+    take_profit = st.number_input("Take Profit", value=0.0)
+    submitted = st.form_submit_button("Add Signal", key="add_signal")
+
+# ---- Run Backtest button ----
+if st.button("Run Backtest", key="run_backtest") and not st.session_state.signals.empty:
+    # backtest code goes here
+    # (this is the same logic you already have for WIN/LOSS/HOLD checks)
+
+    
+    # backtest code goes here
+    # (this is the same logic you already have for WIN/LOSS/HOLD checks)
