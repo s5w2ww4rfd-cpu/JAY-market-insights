@@ -108,38 +108,42 @@ def backtest_signals():
     
     for _, row in signals.iterrows():
         pair_data = data.get(row['pair'])
-        if pair_data is not None and row['date'] in pair_data.index:
-            start_idx = pair_data.index.get_loc(row['date'])
-            end_idx = min(start_idx + lookahead_days, len(pair_data)-1)
-            window = pair_data.iloc[start_idx:end_idx+1]
-            
-            outcome = "HOLD"
-            days_taken = None
-            
-            for i, (idx, day) in enumerate(window.iterrows()):
-                high = day['High']
-                low = day['Low']
-                if row['signal'] == "BUY":
-                    if high >= row['take_profit']:
-                        outcome = "WIN"
-                        days_taken = i
-                        break
-                    elif low <= row['stop_loss']:
-                        outcome = "LOSS"
-                        days_taken = i
-                        break
-                elif row['signal'] == "SELL":
-                    if low <= row['take_profit']:
-                        outcome = "WIN"
-                        days_taken = i
-                        break
-                    elif high >= row['stop_loss']:
-                        outcome = "LOSS"
-                        days_taken = i
-                        break
-            
-            results.append(outcome)
-            days_to_result.append(days_taken)
+        if pair_data is not None and not pair_data.empty:
+            try:
+                start_idx = pair_data.index.get_loc(row['date'])
+                end_idx = min(start_idx + lookahead_days, len(pair_data)-1)
+                window = pair_data.iloc[start_idx:end_idx+1]
+                
+                outcome = "HOLD"
+                days_taken = None
+                
+                for i, (idx, day) in enumerate(window.iterrows()):
+                    high = day['High']
+                    low = day['Low']
+                    if row['signal'] == "BUY":
+                        if high >= row['take_profit']:
+                            outcome = "WIN"
+                            days_taken = i
+                            break
+                        elif low <= row['stop_loss']:
+                            outcome = "LOSS"
+                            days_taken = i
+                            break
+                    elif row['signal'] == "SELL":
+                        if low <= row['take_profit']:
+                            outcome = "WIN"
+                            days_taken = i
+                            break
+                        elif high >= row['stop_loss']:
+                            outcome = "LOSS"
+                            days_taken = i
+                            break
+                
+                results.append(outcome)
+                days_to_result.append(days_taken)
+            except KeyError:
+                results.append("NO DATA")
+                days_to_result.append(None)
         else:
             results.append("NO DATA")
             days_to_result.append(None)
