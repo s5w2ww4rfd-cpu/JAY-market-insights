@@ -474,7 +474,7 @@ with st.form("signal_form_manuel"):
 
 # ---- Run Backtest button ----
 # ---- Run Backtest button ----
-if st.button("Run Backtest", key="run_backtest") and not st.session_state.signals.empty:
+if st.button("Run Backtest", key="run_backtest_main") and not st.session_state.signals.empty:
     # backtest code goes here
     # (this is the same logic you already have for WIN/LOSS/HOLD checks)
 
