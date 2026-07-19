@@ -3,6 +3,7 @@ from newsapi import NewsApiClient
 from transformers import pipeline
 import streamlit as st
 import datetime
+import yfinance as yf
 
 # Set page config
 st.set_page_config(page_title="JAY Market Insights", layout="wide")
@@ -69,6 +70,84 @@ example_prices = {
 def get_current_price(pair):
     """Get current price for a trading pair"""
     return example_prices.get(pair, 0)
+
+# Backtesting function
+@st.cache_data
+def backtest_signals():
+    """Download historical data and backtest trading signals"""
+    pairs = {
+        "EURUSD": "EURUSD=X",
+        "USDJPY": "USDJPY=X",
+        "GBPUSD": "GBPUSD=X",
+        "XAUUSD": "GC=F"   # Gold futures as proxy for XAUUSD
+    }
+    
+    data = {}
+    for pair, ticker in pairs.items():
+        try:
+            df = yf.download(ticker, start="2024-01-01", end="2024-12-31", interval="1d", progress=False)
+            df.index = pd.to_datetime(df.index)
+            data[pair] = df
+        except:
+            pass
+    
+    # Example signals for backtesting
+    signals = pd.DataFrame([
+        {"date":"2024-01-05","signal":"BUY","pair":"EURUSD","stop_loss":1.05,"take_profit":1.08},
+        {"date":"2024-01-10","signal":"SELL","pair":"EURUSD","stop_loss":1.09,"take_profit":1.06},
+        {"date":"2024-03-15","signal":"BUY","pair":"USDJPY","stop_loss":132.5,"take_profit":135.0},
+        {"date":"2024-04-05","signal":"SELL","pair":"GBPUSD","stop_loss":1.28,"take_profit":1.25},
+        {"date":"2024-04-10","signal":"BUY","pair":"XAUUSD","stop_loss":1980,"take_profit":2020},
+    ])
+    signals['date'] = pd.to_datetime(signals['date'])
+    
+    # Evaluate trades
+    lookahead_days = 5
+    results = []
+    days_to_result = []
+    
+    for _, row in signals.iterrows():
+        pair_data = data.get(row['pair'])
+        if pair_data is not None and row['date'] in pair_data.index:
+            start_idx = pair_data.index.get_loc(row['date'])
+            end_idx = min(start_idx + lookahead_days, len(pair_data)-1)
+            window = pair_data.iloc[start_idx:end_idx+1]
+            
+            outcome = "HOLD"
+            days_taken = None
+            
+            for i, (idx, day) in enumerate(window.iterrows()):
+                high = day['High']
+                low = day['Low']
+                if row['signal'] == "BUY":
+                    if high >= row['take_profit']:
+                        outcome = "WIN"
+                        days_taken = i
+                        break
+                    elif low <= row['stop_loss']:
+                        outcome = "LOSS"
+                        days_taken = i
+                        break
+                elif row['signal'] == "SELL":
+                    if low <= row['take_profit']:
+                        outcome = "WIN"
+                        days_taken = i
+                        break
+                    elif high >= row['stop_loss']:
+                        outcome = "LOSS"
+                        days_taken = i
+                        break
+            
+            results.append(outcome)
+            days_to_result.append(days_taken)
+        else:
+            results.append("NO DATA")
+            days_to_result.append(None)
+    
+    signals['result'] = results
+    signals['days_to_result'] = days_to_result
+    
+    return signals
 
 # Display market status
 market_status = market_open_now()
@@ -151,6 +230,33 @@ try:
     with col3:
         avg_conf = df['Confidence'].mean()
         st.metric("Average Confidence", f"{avg_conf:.1%}")
+
+    # Backtesting section
+    st.subheader("📊 Strategy Backtest Results")
+    if st.button("Run Backtest"):
+        with st.spinner("Running backtest on historical data..."):
+            backtest_df = backtest_signals()
+            st.dataframe(backtest_df, use_container_width=True)
+            
+            # Show backtest statistics
+            st.subheader("📈 Backtest Statistics")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                win_rate = (backtest_df['result'] == "WIN").sum() / len(backtest_df) * 100
+                st.metric("Win Rate", f"{win_rate:.1f}%")
+            
+            with col2:
+                loss_rate = (backtest_df['result'] == "LOSS").sum() / len(backtest_df) * 100
+                st.metric("Loss Rate", f"{loss_rate:.1f}%")
+            
+            with col3:
+                hold_rate = (backtest_df['result'] == "HOLD").sum() / len(backtest_df) * 100
+                st.metric("Hold Rate", f"{hold_rate:.1f}%")
+            
+            with col4:
+                total_trades = len(backtest_df)
+                st.metric("Total Trades", total_trades)
 
 except Exception as e:
     st.error(f"Error: {e}")
