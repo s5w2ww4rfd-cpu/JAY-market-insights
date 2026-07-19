@@ -84,9 +84,9 @@ def pip_difference(pair, entry, exit_price):
     except:
         return 0
 
-# Backtesting function with real yfinance data
+# Backtesting function with timeframe selector
 @st.cache_data
-def backtest_signals():
+def backtest_signals(timeframe="1d"):
     """Download historical data and backtest trading signals with pip calculation"""
     try:
         pairs = {
@@ -99,7 +99,7 @@ def backtest_signals():
         data = {}
         for pair, ticker in pairs.items():
             try:
-                df = yf.download(ticker, start="2024-01-01", end="2024-12-31", interval="1d", progress=False)
+                df = yf.download(ticker, start="2026-01-01", end="2026-12-31", interval=timeframe, progress=False)
                 if not df.empty:
                     df.index = pd.to_datetime(df.index)
                     data[pair] = df
@@ -108,16 +108,16 @@ def backtest_signals():
         
         # Example signals for backtesting
         signals = pd.DataFrame([
-            {"date":"2024-01-05","signal":"BUY","pair":"EURUSD","stop_loss":1.05,"take_profit":1.08},
-            {"date":"2024-01-10","signal":"SELL","pair":"EURUSD","stop_loss":1.09,"take_profit":1.06},
-            {"date":"2024-03-15","signal":"BUY","pair":"USDJPY","stop_loss":132.5,"take_profit":135.0},
-            {"date":"2024-04-05","signal":"SELL","pair":"GBPUSD","stop_loss":1.28,"take_profit":1.25},
-            {"date":"2024-04-10","signal":"BUY","pair":"XAUUSD","stop_loss":1980,"take_profit":2020},
+            {"date":"2026-01-05","signal":"BUY","pair":"EURUSD","stop_loss":1.05,"take_profit":1.08},
+            {"date":"2026-01-10","signal":"SELL","pair":"EURUSD","stop_loss":1.09,"take_profit":1.06},
+            {"date":"2026-03-15","signal":"BUY","pair":"USDJPY","stop_loss":132.5,"take_profit":135.0},
+            {"date":"2026-04-05","signal":"SELL","pair":"GBPUSD","stop_loss":1.28,"take_profit":1.25},
+            {"date":"2026-04-10","signal":"BUY","pair":"XAUUSD","stop_loss":1980,"take_profit":2020},
         ])
         signals['date'] = pd.to_datetime(signals['date'])
         
         # Evaluate trades
-        lookahead_days = 5
+        lookahead = 5
         results = []
         days_to_result = []
         pip_results = []
@@ -132,7 +132,7 @@ def backtest_signals():
                     
                     if len(matching_dates) > 0:
                         start_idx = pair_data.index.get_loc(matching_dates[0])
-                        end_idx = min(start_idx + lookahead_days, len(pair_data)-1)
+                        end_idx = min(start_idx + lookahead, len(pair_data)-1)
                         window = pair_data.iloc[start_idx:end_idx+1]
                         
                         outcome = "HOLD"
@@ -160,12 +160,12 @@ def backtest_signals():
                                 if low <= row['take_profit']:
                                     outcome = "WIN"
                                     days_taken = i
-                                    pip_value = -pip_difference(row['pair'], entry_price, row['take_profit'])
+                                    pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
                                     break
                                 elif high >= row['stop_loss']:
                                     outcome = "LOSS"
                                     days_taken = i
-                                    pip_value = -pip_difference(row['pair'], entry_price, row['stop_loss'])
+                                    pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
                                     break
                         
                         results.append(outcome)
@@ -277,9 +277,17 @@ try:
 
     # Backtesting section
     st.subheader("📊 Strategy Backtest Results")
+    
+    # Timeframe selector
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("**Select Timeframe for Backtest:**")
+    with col2:
+        timeframe = st.selectbox("Timeframe", ["1d", "15m", "5m"], label_visibility="collapsed")
+    
     if st.button("Run Backtest"):
-        with st.spinner("Running backtest on historical data..."):
-            backtest_df = backtest_signals()
+        with st.spinner(f"Running backtest on {timeframe} data..."):
+            backtest_df = backtest_signals(timeframe=timeframe)
             
             if not backtest_df.empty:
                 st.dataframe(backtest_df, use_container_width=True)
