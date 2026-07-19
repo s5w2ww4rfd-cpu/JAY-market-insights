@@ -3,3 +3,4 @@ pandas
 transformers
 torch
 newsapi-python
+yfinance
