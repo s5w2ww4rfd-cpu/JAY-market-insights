@@ -464,7 +464,7 @@ if st.button("Run Backtest", key="run_backtest") and not st.session_state.signal
     st.write("Net average pips per trade:", st.session_state.signals['pips'].mean())
 # --- Manual signal input form ---
 # ---- Manual signal input form ----
-with st.form("signal_form"):
+with st.form("signal_form_manuel"):
     date = st.date_input("Signal Date")
     signal = st.selectbox("Signal", ["BUY", "SELL"])
     pair = st.selectbox("Pair", ["EURUSD", "USDJPY", "GBPUSD", "XAUUSD"])
