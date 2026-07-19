@@ -35,18 +35,31 @@ def get_trade_signal(sentiment, pairs):
     else:
         return "⏸️ HOLD"
 
-# Get trade levels (stop loss and take profit)
+# Get trade levels (stop loss and take profit) with better rounding
 def get_trade_levels(signal, current_price):
     if signal.startswith("🟢"):  # BUY signal
-        stop_loss = current_price * 0.99   # 1% below
-        take_profit = current_price * 1.02 # 2% above
+        stop_loss = round(current_price * 0.99, 5)   # 1% below
+        take_profit = round(current_price * 1.02, 5) # 2% above
     elif signal.startswith("🔴"):  # SELL signal
-        stop_loss = current_price * 1.01   # 1% above
-        take_profit = current_price * 0.98 # 2% below
+        stop_loss = round(current_price * 1.01, 5)   # 1% above
+        take_profit = round(current_price * 0.98, 5) # 2% below
     else:
-        stop_loss = None
-        take_profit = None
+        stop_loss, take_profit = None, None
     return stop_loss, take_profit
+
+# Example prices for trading pairs
+example_prices = {
+    "EURUSD": 1.09500,
+    "GBPUSD": 1.27500,
+    "XAUUSD": 2050.00000,
+    "USDJPY": 145.50000,
+    "USDCHF": 0.88500,
+    "DXY": 103.50000
+}
+
+def get_current_price(pair):
+    """Get current price for a trading pair"""
+    return example_prices.get(pair, 0)
 
 # Connect with your API key
 try:
@@ -80,38 +93,28 @@ try:
     # Add trading signal column
     df["Signal"] = df.apply(lambda row: get_trade_signal(row["Sentiment"], row["Suggested Pairs"].split(", ") if row["Suggested Pairs"] != "N/A" else []), axis=1)
     
-    # Add example current prices and calculate stop loss/take profit
-    # Using example prices for demonstration
-    example_prices = {
-        "EURUSD": 1.0950,
-        "GBPUSD": 1.2750,
-        "XAUUSD": 2050.0,
-        "USDJPY": 145.50,
-        "USDCHF": 0.8850,
-        "DXY": 103.50
-    }
-    
-    def get_price_for_pairs(pairs_str):
+    # Add current price based on first suggested pair
+    def get_first_pair_price(pairs_str):
         if pairs_str == "N/A" or not pairs_str:
             return 0
         pairs = pairs_str.split(", ")
         if pairs:
             first_pair = pairs[0]
-            return example_prices.get(first_pair, 0)
+            return get_current_price(first_pair)
         return 0
     
-    df["Current Price"] = df["Suggested Pairs"].apply(get_price_for_pairs)
+    df["Current Price"] = df["Suggested Pairs"].apply(get_first_pair_price)
     
-    # Calculate stop loss and take profit
-    def calc_levels(row):
-        sl, tp = get_trade_levels(row["Signal"], row["Current Price"])
-        return pd.Series([sl, tp])
+    # Calculate stop loss and take profit with improved rounding
+    df["Stop Loss"], df["Take Profit"] = zip(*df.apply(
+        lambda row: get_trade_levels(row["Signal"], row["Current Price"]),
+        axis=1
+    ))
     
-    df[["Stop Loss", "Take Profit"]] = df.apply(calc_levels, axis=1)
-    
-    # Format the output columns
-    df["Stop Loss"] = df["Stop Loss"].apply(lambda x: f"{x:.4f}" if x else "N/A")
-    df["Take Profit"] = df["Take Profit"].apply(lambda x: f"{x:.4f}" if x else "N/A")
+    # Format numeric columns for display
+    df["Current Price"] = df["Current Price"].apply(lambda x: f"{x:.5f}" if x else "N/A")
+    df["Stop Loss"] = df["Stop Loss"].apply(lambda x: f"{x:.5f}" if x else "N/A")
+    df["Take Profit"] = df["Take Profit"].apply(lambda x: f"{x:.5f}" if x else "N/A")
 
     # Display as beautiful table
     st.subheader("📰 Latest Market News & Trading Signals")
