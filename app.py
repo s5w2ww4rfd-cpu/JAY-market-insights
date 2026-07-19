@@ -71,20 +71,123 @@ def get_current_price(pair):
     """Get current price for a trading pair"""
     return example_prices.get(pair, 0)
 
-# Backtesting function - SIMPLIFIED VERSION
+# Pip calculation helper
+def pip_difference(pair, entry, exit_price):
+    """Calculate pip difference based on pair type"""
+    try:
+        if "JPY" in pair:
+            return round((exit_price - entry) * 100, 2)   # 1 pip = 0.01
+        elif "XAU" in pair or "GC" in pair:
+            return round(exit_price - entry, 2)           # treat 1 unit = 1 pip
+        else:
+            return round((exit_price - entry) * 10000, 2) # 1 pip = 0.0001
+    except:
+        return 0
+
+# Backtesting function with real yfinance data
 @st.cache_data
 def backtest_signals():
-    """Backtest trading signals with simple logic"""
+    """Download historical data and backtest trading signals with pip calculation"""
     try:
-        # Simple test data with results
+        pairs = {
+            "EURUSD": "EURUSD=X",
+            "USDJPY": "USDJPY=X",
+            "GBPUSD": "GBPUSD=X",
+            "XAUUSD": "GC=F"   # Gold futures as proxy for XAUUSD
+        }
+        
+        data = {}
+        for pair, ticker in pairs.items():
+            try:
+                df = yf.download(ticker, start="2024-01-01", end="2024-12-31", interval="1d", progress=False)
+                if not df.empty:
+                    df.index = pd.to_datetime(df.index)
+                    data[pair] = df
+            except:
+                pass
+        
+        # Example signals for backtesting
         signals = pd.DataFrame([
-            {"date":"2024-01-05","signal":"BUY","pair":"EURUSD","stop_loss":1.05,"take_profit":1.08,"result":"WIN","days_to_result":2},
-            {"date":"2024-01-10","signal":"SELL","pair":"EURUSD","stop_loss":1.09,"take_profit":1.06,"result":"WIN","days_to_result":1},
-            {"date":"2024-03-15","signal":"BUY","pair":"USDJPY","stop_loss":132.5,"take_profit":135.0,"result":"LOSS","days_to_result":3},
-            {"date":"2024-04-05","signal":"SELL","pair":"GBPUSD","stop_loss":1.28,"take_profit":1.25,"result":"WIN","days_to_result":2},
-            {"date":"2024-04-10","signal":"BUY","pair":"XAUUSD","stop_loss":1980,"take_profit":2020,"result":"HOLD","days_to_result":None},
+            {"date":"2024-01-05","signal":"BUY","pair":"EURUSD","stop_loss":1.05,"take_profit":1.08},
+            {"date":"2024-01-10","signal":"SELL","pair":"EURUSD","stop_loss":1.09,"take_profit":1.06},
+            {"date":"2024-03-15","signal":"BUY","pair":"USDJPY","stop_loss":132.5,"take_profit":135.0},
+            {"date":"2024-04-05","signal":"SELL","pair":"GBPUSD","stop_loss":1.28,"take_profit":1.25},
+            {"date":"2024-04-10","signal":"BUY","pair":"XAUUSD","stop_loss":1980,"take_profit":2020},
         ])
         signals['date'] = pd.to_datetime(signals['date'])
+        
+        # Evaluate trades
+        lookahead_days = 5
+        results = []
+        days_to_result = []
+        pip_results = []
+        
+        for _, row in signals.iterrows():
+            pair_data = data.get(row['pair'])
+            
+            if pair_data is not None and not pair_data.empty:
+                try:
+                    # Check if date exists in the data
+                    matching_dates = pair_data.index[pair_data.index.date == row['date'].date()]
+                    
+                    if len(matching_dates) > 0:
+                        start_idx = pair_data.index.get_loc(matching_dates[0])
+                        end_idx = min(start_idx + lookahead_days, len(pair_data)-1)
+                        window = pair_data.iloc[start_idx:end_idx+1]
+                        
+                        outcome = "HOLD"
+                        days_taken = None
+                        pip_value = 0
+                        
+                        entry_price = pair_data.iloc[start_idx]['Open']
+                        
+                        for i, (idx, day) in enumerate(window.iterrows()):
+                            high = day['High']
+                            low = day['Low']
+                            
+                            if row['signal'] == "BUY":
+                                if high >= row['take_profit']:
+                                    outcome = "WIN"
+                                    days_taken = i
+                                    pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
+                                    break
+                                elif low <= row['stop_loss']:
+                                    outcome = "LOSS"
+                                    days_taken = i
+                                    pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
+                                    break
+                            elif row['signal'] == "SELL":
+                                if low <= row['take_profit']:
+                                    outcome = "WIN"
+                                    days_taken = i
+                                    pip_value = -pip_difference(row['pair'], entry_price, row['take_profit'])
+                                    break
+                                elif high >= row['stop_loss']:
+                                    outcome = "LOSS"
+                                    days_taken = i
+                                    pip_value = -pip_difference(row['pair'], entry_price, row['stop_loss'])
+                                    break
+                        
+                        results.append(outcome)
+                        days_to_result.append(days_taken)
+                        pip_results.append(pip_value)
+                    else:
+                        results.append("NO DATA")
+                        days_to_result.append(None)
+                        pip_results.append(0)
+                except Exception as e:
+                    results.append("NO DATA")
+                    days_to_result.append(None)
+                    pip_results.append(0)
+            else:
+                results.append("NO DATA")
+                days_to_result.append(None)
+                pip_results.append(0)
+        
+        signals['result'] = results
+        signals['days_to_result'] = days_to_result
+        signals['pips'] = pip_results
+        
         return signals
     except Exception as e:
         st.error(f"Backtest Error: {e}")
@@ -183,6 +286,7 @@ try:
                 
                 # Show backtest statistics
                 st.subheader("📈 Backtest Statistics")
+                
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
@@ -203,6 +307,31 @@ try:
                 
                 with col4:
                     st.metric("Total Trades", total_trades)
+                
+                # Pip statistics
+                st.subheader("💰 Pip Statistics")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    avg_win_pips = backtest_df.loc[backtest_df['result']=="WIN", 'pips'].mean()
+                    if pd.isna(avg_win_pips):
+                        avg_win_pips = 0
+                    st.metric("Avg Pips (WIN)", f"{avg_win_pips:.2f}")
+                
+                with col2:
+                    avg_loss_pips = backtest_df.loc[backtest_df['result']=="LOSS", 'pips'].mean()
+                    if pd.isna(avg_loss_pips):
+                        avg_loss_pips = 0
+                    st.metric("Avg Pips (LOSS)", f"{avg_loss_pips:.2f}")
+                
+                with col3:
+                    net_pips = backtest_df['pips'].sum()
+                    st.metric("Total Net Pips", f"{net_pips:.2f}")
+                
+                with col4:
+                    avg_pips = backtest_df['pips'].mean()
+                    st.metric("Avg Pips/Trade", f"{avg_pips:.2f}")
             else:
                 st.error("No backtest data available")
 
