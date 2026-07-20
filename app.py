@@ -263,7 +263,7 @@ try:
     # Format numeric columns for display
     df["Current Price"] = df["Current Price"].apply(lambda x: f"{x:.5f}" if x else "N/A")
     df["Stop Loss"] = df["Stop Loss"].apply(lambda x: f"{x:.5f}" if x else "N/A")
-    df["Take Profit"] = df["Take Profit"].apply(lambda x: f"{x:.5f}" if x else "N/
+    df["Take Profit"] = df["Take Profit"].apply(lambda x: f"{x:.5f}" if x else "N/A")
 # Display as beautiful table
 st.subheader("📰 Latest Market")
 st.dataframe(df, use_container_width=True)
