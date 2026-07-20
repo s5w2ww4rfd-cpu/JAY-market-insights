@@ -258,7 +258,7 @@ try:
     df["Stop Loss"], df["Take Profit"] = zip(*df.apply(
         lambda row: get_trade_levels(row["Signal"], row["Current Price"]),
         axis=1
-        
+    ))    
     
     # Format numeric columns for display
     df["Current Price"] = df["Current Price"].apply(lambda x: f"{x:.5f}" if x else "N/A")
