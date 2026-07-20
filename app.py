@@ -27,7 +27,12 @@ def market_open_now():
     hour = now.hour
     # Forex closes Friday 22:00 UTC, opens Sunday 22:00 UTC
     return not ((weekday == 5 and hour >= 22) or (weekday == 6 and hour < 22))
- map_to_pairs(headline, result):
+
+# Example function using map_to_pairs
+def map_to_pairs(headline, result):
+    # Replace with your actual logic
+    return (headline, result)
+
     label = result[0]['label'].upper()
     pairs_map = {
         "POSITIVE": ["EURUSD", "GBPUSD", "XAUUSD"],
