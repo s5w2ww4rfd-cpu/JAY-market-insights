@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import requests
-import matplotlib.pyplot as plt
 from datetime import datetime
 
 API_KEY = "f8665eb595e943a7bbbe1e05ecf32730"
@@ -42,9 +41,9 @@ def fetch_news(query="forex OR EURUSD OR USDJPY OR GBPUSD OR XAUUSD"):
 def analyze_sentiment(headline):
     headline = headline.lower()
     if any(word in headline for word in ["buy", "bullish", "positive", "upside"]):
-        return "BUY / Positive"
+        return "BUY"
     elif any(word in headline for word in ["sell", "bearish", "negative", "downside"]):
-        return "SELL / Negative"
+        return "SELL"
     else:
         return "Neutral"
 
@@ -69,12 +68,9 @@ if articles:
     df_news = pd.DataFrame(data)
     st.dataframe(df_news, use_container_width=True)
 
-    # Sentiment Pie Chart
+    # Sentiment Distribution Chart (bar chart instead of pie)
     sentiment_counts = df_news['sentiment'].value_counts()
-    fig, ax = plt.subplots()
-    ax.pie(sentiment_counts, labels=sentiment_counts.index, autopct='%1.1f%%', startangle=90)
-    ax.set_title("News Sentiment Distribution")
-    st.pyplot(fig)
+    st.bar_chart(sentiment_counts)
 else:
     st.write("No news available right now.")
 
@@ -182,7 +178,7 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
         st.subheader("Signal vs News Sentiment")
         st.write(f"Your latest signal: {latest_signal['signal']} on {latest_signal['pair']}")
         st.write(f"Dominant news sentiment: {dominant_sentiment}")
-        if latest_signal['signal'] in dominant_sentiment:
+        if latest_signal['signal'] == dominant_sentiment:
             st.success("✅ Your signal aligns with current news sentiment.")
         else:
             st.warning("⚠️ Your signal is opposite to dominant news sentiment. Trade cautiously.")
