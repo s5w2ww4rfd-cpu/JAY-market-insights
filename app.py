@@ -252,7 +252,7 @@ try:
             return get_current_price(first_pair)
         return 0
     
-   df["Current Price"] = df["Suggested Pairs"].apply(get_first_pair_price)
+df["Current Price"] = df["Suggested Pairs"].apply(get_first_pair_price)
     
     # Calculate stop loss and take profit with improved rounding
 df["Stop Loss"], df["Take Profit"] = zip(*df.apply(
