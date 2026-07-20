@@ -1,375 +1,12 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
-from datetime import datetime   # required for datetime(...)
+import requests
+import matplotlib.pyplot as plt
+from datetime import datetime
 
-# Jay Market Insights - initial price data
-price_data = {
-    datetime(2026, 7, 20): {"close": 4000, "low": 3995, "high": 4010},
-    datetime(2026, 7, 21): {"close": 4020, "low": 4010, "high": 4035},
-    datetime(2026, 7, 22): {"close": 3985, "low": 3970, "high": 4000},
-    datetime(2026, 7, 23): {"close": 4015, "low": 4000, "high": 4030},
-    datetime(2026, 7, 24): {"close": 3990, "low": 3980, "high": 4005},
-}
-
-# Convert dictionary to DataFrame
-df = pd.DataFrame.from_dict(price_data, orient="index")
-df.index.name = "Date"
-
-# Jay Market Insights App UI
-st.title("📊 Jay Market Insights")
-st.subheader("Raw Price Data")
-st.dataframe(df, use_container_width=True)
-
-# Function to check if market is open
-def market_open_now():
-    now = datetime.utcnow()
-    weekday = now.weekday()  # 0=Monday, 6=Sunday
-    hour = now.hour
-    # Forex closes Friday 22:00 UTC, opens Sunday 22:00 UTC
-    return not ((weekday == 5 and hour >= 22) or (weekday == 6 and hour < 22))
-
-# Example function using map_to_pairs
-def map_to_pairs(headline, result):
-    # Replace with your actual logic
-    return (headline, result)
-
-    label = result[0]['label'].upper()
-    pairs_map = {
-        "POSITIVE": ["EURUSD", "GBPUSD", "XAUUSD"],
-        "NEGATIVE": ["USDJPY", "USDCHF", "DXY"]
-    }
-    return pairs_map.get(label, [])
-
-# Example logic to add Buy/Sell column
-def get_trade_signal(sentiment, pairs):
-    if sentiment == "POSITIVE":
-        return "🟢 BUY " + ", ".join(pairs)
-    elif sentiment == "NEGATIVE":
-        return "🔴 SELL " + ", ".join(pairs)
-    else:
-        return "⏸️ HOLD"
-
-# Get trade levels (stop loss and take profit) with better rounding
-def get_trade_levels(signal, current_price):
-    if isinstance(signal, str) and signal.startswith("🟢"):  # BUY signal
-        stop_loss = round(current_price * 0.99, 5)   # 1% below
-        take_profit = round(current_price * 1.02, 5) # 2% above
-    elif isinstance(signal, str) and signal.startswith("🔴"):  # SELL signal
-        stop_loss = round(current_price * 1.01, 5)   # 1% above
-        take_profit = round(current_price * 0.98, 5) # 2% below
-    else:
-        stop_loss, take_profit = None, None
-    return stop_loss, take_profit
-
-# Example prices for trading pairs
-example_prices = {
-    "EURUSD": 1.09500,
-    "GBPUSD": 1.27500,
-    "XAUUSD": 2050.00000,
-    "USDJPY": 145.50000,
-    "USDCHF": 0.88500,
-    "DXY": 103.50000
-}
-
-def get_current_price(pair):
-    """Get current price for a trading pair"""
-    return example_prices.get(pair, 0)
-
-# Pip calculation helper
-def pip_difference(pair, entry, exit_price):
-    """Calculate pip difference based on pair type"""
-    try:
-        if "JPY" in pair:
-            return round((exit_price - entry) * 100, 2)   # 1 pip = 0.01
-        elif "XAU" in pair or "GC" in pair:
-            return round(exit_price - entry, 2)           # treat 1 unit = 1 pip
-        else:
-            return round((exit_price - entry) * 10000, 2) # 1 pip = 0.0001
-    except:
-        return 0
-
-# Backtesting function with timeframe selector
-@st.cache_data
-def backtest_signals(timeframe="1d"):
-    """Download historical data and backtest trading signals with pip calculation"""
-    try:
-        pairs = {
-            "EURUSD": "EURUSD=X",
-            "USDJPY": "USDJPY=X",
-            "GBPUSD": "GBPUSD=X",
-            "XAUUSD": "GC=F"   # Gold futures as proxy for XAUUSD
-        }
-        
-        data = {}
-        for pair, ticker in pairs.items():
-            try:
-                df = yf.download(ticker, start="2026-01-01", end="2026-12-31", interval=timeframe, progress=False)
-                if not df.empty:
-                    df.index = pd.to_datetime(df.index)
-                    data[pair] = df
-            except:
-                pass
-        
-        # Example signals for backtesting
-        signals = pd.DataFrame([
-            {"date":"2026-01-05","signal":"BUY","pair":"EURUSD","stop_loss":1.05,"take_profit":1.08},
-            {"date":"2026-01-10","signal":"SELL","pair":"EURUSD","stop_loss":1.09,"take_profit":1.06},
-            {"date":"2026-03-15","signal":"BUY","pair":"USDJPY","stop_loss":132.5,"take_profit":135.0},
-            {"date":"2026-04-05","signal":"SELL","pair":"GBPUSD","stop_loss":1.28,"take_profit":1.25},
-            {"date":"2026-04-10","signal":"BUY","pair":"XAUUSD","stop_loss":1980,"take_profit":2020},
-        ])
-        signals['date'] = pd.to_datetime(signals['date'])
-        
-        # Evaluate trades
-        lookahead = 5
-        results = []
-        days_to_result = []
-        pip_results = []
-        
-        for _, row in signals.iterrows():
-            pair_data = data.get(row['pair'])
-            
-            if pair_data is not None and not pair_data.empty:
-                try:
-                    # Check if date exists in the data
-                    matching_dates = pair_data.index[pair_data.index.date == row['date'].date()]
-                    
-                    if len(matching_dates) > 0:
-                        start_idx = pair_data.index.get_loc(matching_dates[0])
-                        end_idx = min(start_idx + lookahead, len(pair_data)-1)
-                        window = pair_data.iloc[start_idx:end_idx+1]
-                        
-                        outcome = "HOLD"
-                        days_taken = None
-                        pip_value = 0
-                        
-                        entry_price = pair_data.iloc[start_idx]['Open']
-                        
-                        for i, (idx, day) in enumerate(window.iterrows()):
-                            high = day['High']
-                            low = day['Low']
-                            
-                            if row['signal'] == "BUY":
-                                if high >= row['take_profit']:
-                                    outcome = "WIN"
-                                    days_taken = i
-                                    pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
-                                    break
-                                elif low <= row['stop_loss']:
-                                    outcome = "LOSS"
-                                    days_taken = i
-                                    pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
-                                    break
-                            elif row['signal'] == "SELL":
-                                if low <= row['take_profit']:
-                                    outcome = "WIN"
-                                    days_taken = i
-                                    pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
-                                    break
-                                elif high >= row['stop_loss']:
-                                    outcome = "LOSS"
-                                    days_taken = i
-                                    pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
-                                    break
-                        
-                        results.append(outcome)
-                        days_to_result.append(days_taken)
-                        pip_results.append(pip_value)
-                    else:
-                        results.append("NO DATA")
-                        days_to_result.append(None)
-                        pip_results.append(0)
-                except Exception as e:
-                    results.append("NO DATA")
-                    days_to_result.append(None)
-                    pip_results.append(0)
-            else:
-                results.append("NO DATA")
-                days_to_result.append(None)
-                pip_results.append(0)
-        
-        signals['result'] = results
-        signals['days_to_result'] = days_to_result
-        signals['pips'] = pip_results
-        
-        return signals
-    except Exception as e:
-        st.error(f"Backtest Error: {e}")
-        return pd.DataFrame()
-
-# Display market status
-market_status = market_open_now()
-if market_status:
-    st.success("🟢 **FOREX MARKET IS OPEN**")
-else:
-    st.warning("🔴 **FOREX MARKET IS CLOSED**")
-
-# Connect with your API key
-
-    newsapi = NewsApiClient(api_key="f8665eb595e943a7bbbe1e05ecf32730")
-
-    # Pull latest financial headlines
-    articles = newsapi.get_everything(
-        q="Federal Reserve OR inflation OR gold OR ECB OR Bank of England OR geopolitics OR oil OR unemployment OR China OR recession OR jobs OR USD OR forex OR currency",
-        language="en",
-        sort_by="publishedAt",
-        page_size=10
-    )
-
-    # Collect results
-    results = []
-    for a in articles['articles'][:10]:  # show top 10 headlines
-        headline = a['title']
-        result = sentiment_model(headline)
-        suggestion = map_to_pairs(headline, result)
-        results.append({
-            "Headline": headline,
-            "Sentiment": result[0]['label'],
-            "Confidence": round(result[0]['score'], 2),
-            "Suggested Pairs": ", ".join(suggestion) if suggestion else "N/A",
-            "Source": a['source']['name']
-        })
-
-    # Create dataframe
-    df = pd.DataFrame(results)
-    
-    # Add trading signal column
-    df["Signal"] = df.apply(lambda row: get_trade_signal(row["Sentiment"], row["Suggested Pairs"].split(", ") if row["Suggested Pairs"] != "N/A" else []), axis=1)
-    
-    # Add current price based on first suggested pair
-    def get_first_pair_price(pairs_str):
-        if pairs_str == "N/A" or not pairs_str:
-            return 0
-        pairs = pairs_str.split(", ")
-        if pairs:
-            first_pair = pairs[0]
-            return get_current_price(first_pair)
-        return 0
-# Current price
-df["Current Price"] = df["Suggested Pairs"].apply(get_first_pair_price)
-
-# Calculate stop loss and take profit with improved rounding
-df["Stop Loss"], df["Take Profit"] = zip(*df.apply(
-    lambda row: get_trade_levels(row),
-    axis=1
-))
-
-# Format numeric columns for display
-df["Current Price"] = df["Current Price"].apply(lambda x: f"{x:.5f}" if x else "N/A")
-df["Stop Loss"] = df["Stop Loss"].apply(lambda x: f"{x:.5f}" if x else "N/A")
-df["Take Profit"] = df["Take Profit"].apply(lambda x: f"{x:.5f}" if x else "N/A")
-
-# Display as beautiful table
-st.subheader("📈 Latest Market")
-st.dataframe(df, use_container_width=True)
-
-# Backtest button
-if st.button("Run Backtest", key="run_backtest_"):
-    stats = run_backtest(st.session_state.signals, price_data)
-    st.write("Backtest Statistics")
-    st.write(stats)
-
-
-    st.write(stats)
-
-# Show statistics
-st.subheader("📈 Sentiment Summary")
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    positive = len(df[df['Sentiment'] == 'positive'])
-    st.metric("🟢 Buy Signals", positive)
-
-with col2:
-    negative = len(df[df['Sentiment'] == 'negative'])
-    st.metric("🔴 Sell Signals", negative)
-
-with col3:
-    neutral = len(df[df['Sentiment'] == 'neutral'])
-    st.metric("⚪ Neutral Signals", neutral)
-
-    
-    with col2:
-        negative = len(df[df['Sentiment'] == 'NEGATIVE'])
-        st.metric("🔴 Sell Signals", negative)
-    
-    with col3:
-        avg_conf = df['Confidence'].mean()
-        st.metric("Average Confidence", f"{avg_conf:.1%}")
-
-    # Backtesting section
-    st.subheader("📊 Strategy Backtest Results")
-    
-    # Timeframe selector
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown("**Select Timeframe for Backtest:**")
-    with col2:
-        timeframe = st.selectbox("Timeframe", ["1d", "15m", "5m"], label_visibility="collapsed")
-    
-    if st.button("Run Backtest"):
-        with st.spinner(f"Running backtest on {timeframe} data..."):
-            backtest_df = backtest_signals(timeframe=timeframe)
-            
-            if not backtest_df.empty:
-                st.dataframe(backtest_df, use_container_width=True)
-                
-                # Show backtest statistics
-                st.subheader("📈 Backtest Statistics")
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    win_count = int((backtest_df['result'] == "WIN").sum())
-                    total_trades = int(len(backtest_df))
-                    win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0
-                    st.metric("Win Rate", f"{win_rate:.1f}%")
-                
-                with col2:
-                    loss_count = int((backtest_df['result'] == "LOSS").sum())
-                    loss_rate = (loss_count / total_trades * 100) if total_trades > 0 else 0
-                    st.metric("Loss Rate", f"{loss_rate:.1f}%")
-                
-                with col3:
-                    hold_count = int((backtest_df['result'] == "HOLD").sum())
-                    hold_rate = (hold_count / total_trades * 100) if total_trades > 0 else 0
-                    st.metric("Hold Rate", f"{hold_rate:.1f}%")
-                
-                with col4:
-                    st.metric("Total Trades", total_trades)
-                
-                # Pip statistics
-                st.subheader("💰 Pip Statistics")
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    avg_win_pips = backtest_df.loc[backtest_df['result']=="WIN", 'pips'].mean()
-                    if pd.isna(avg_win_pips):
-                        avg_win_pips = 0
-                    st.metric("Avg Pips (WIN)", f"{avg_win_pips:.2f}")
-                
-                with col2:
-                    avg_loss_pips = backtest_df.loc[backtest_df['result']=="LOSS", 'pips'].mean()
-                    if pd.isna(avg_loss_pips):
-                        avg_loss_pips = 0
-                    st.metric("Avg Pips (LOSS)", f"{avg_loss_pips:.2f}")
-                
-                with col3:
-                    net_pips = backtest_df['pips'].sum()
-                    st.metric("Total Net Pips", f"{net_pips:.2f}")
-                
-                with col4:
-                    avg_pips = backtest_df['pips'].mean()
-# Backtest button
-if st.button("Run Backtest", key="run_backtest_"):
-    try:
-        stats = run_backtest(st.session_state.signals, price_data)
-        st.write("Backtest Statistics")
-        st.write(stats)
-    except Exception as e:
-        st.error(f"Backtest failed: {e}")
-
+API_KEY = "f8665eb595e943a7bbbe1e05ecf32730"
+NEWS_URL = "https://newsapi.org/v2/everything"
 
 # --- Helper: pip calculation ---
 def pip_difference(pair, entry, exit):
@@ -380,13 +17,72 @@ def pip_difference(pair, entry, exit):
     else:
         return (exit - entry) * 10000 # 1 pip = 0.0001
 
-# --- Streamlit UI ---
-st.title("Strategy Backtest Results")
+# --- Market status helper ---
+def market_open_now():
+    now = datetime.utcnow()
+    weekday = now.weekday()  # 0=Monday, 6=Sunday
+    hour = now.hour
+    return not ((weekday == 5 and hour >= 22) or (weekday == 6 and hour < 22))
 
-# Timeframe selector (default daily, but 15m/5m available)
+# --- News fetch + sentiment ---
+def fetch_news(query="forex OR EURUSD OR USDJPY OR GBPUSD OR XAUUSD"):
+    params = {
+        "q": query,
+        "language": "en",
+        "sortBy": "publishedAt",
+        "pageSize": 10,
+        "apiKey": API_KEY
+    }
+    response = requests.get(NEWS_URL, params=params)
+    if response.status_code == 200:
+        return response.json().get("articles", [])
+    else:
+        return []
+
+def analyze_sentiment(headline):
+    headline = headline.lower()
+    if any(word in headline for word in ["buy", "bullish", "positive", "upside"]):
+        return "BUY / Positive"
+    elif any(word in headline for word in ["sell", "bearish", "negative", "downside"]):
+        return "SELL / Negative"
+    else:
+        return "Neutral"
+
+# --- Streamlit UI ---
+st.title("📊 Jay Market Insights")
+st.subheader("Market Status")
+st.write("Market Open" if market_open_now() else "Market Closed")
+
+# Live News Sentiment
+st.subheader("📰 Live Forex News Sentiment")
+articles = fetch_news()
+data = []
+if articles:
+    for art in articles:
+        sentiment = analyze_sentiment(art["title"])
+        data.append({
+            "headline": art["title"],
+            "source": art["source"]["name"],
+            "published": art["publishedAt"],
+            "sentiment": sentiment
+        })
+    df_news = pd.DataFrame(data)
+    st.dataframe(df_news, use_container_width=True)
+
+    # Sentiment Pie Chart
+    sentiment_counts = df_news['sentiment'].value_counts()
+    fig, ax = plt.subplots()
+    ax.pie(sentiment_counts, labels=sentiment_counts.index, autopct='%1.1f%%', startangle=90)
+    ax.set_title("News Sentiment Distribution")
+    st.pyplot(fig)
+else:
+    st.write("No news available right now.")
+
+# --- Strategy Backtest Results ---
+st.subheader("Strategy Backtest Results")
+
 timeframe = st.selectbox("Select timeframe", ["1d", "15m", "5m"], index=0)
 
-# Manual signal input form
 with st.form("signal_form"):
     date = st.date_input("Signal Date")
     signal = st.selectbox("Signal", ["BUY", "SELL"])
@@ -395,7 +91,6 @@ with st.form("signal_form"):
     take_profit = st.number_input("Take Profit", value=0.0)
     submitted = st.form_submit_button("Add Signal")
 
-# Store signals
 if "signals" not in st.session_state:
     st.session_state.signals = pd.DataFrame(columns=["date","signal","pair","stop_loss","take_profit"])
 
@@ -411,10 +106,7 @@ if submitted:
 
 st.write("Signals Table", st.session_state.signals)
 
-# --- Run Backtest ---
-if st.button("Run Backtest", key="run_backtest") and not st.session_state.signals.empty:
-    # backtest code goes here
-    # Download data for pairs
+if st.button("Run Backtest") and not st.session_state.signals.empty:
     pairs = {
         "EURUSD": "EURUSD=X",
         "USDJPY": "USDJPY=X",
@@ -475,7 +167,6 @@ if st.button("Run Backtest", key="run_backtest") and not st.session_state.signal
 
     st.write("Backtest Results", st.session_state.signals)
 
-    # Stats
     st.subheader("Backtest Statistics")
     st.write("Win rate:", (st.session_state.signals['result'] == "WIN").mean())
     st.write("Loss rate:", (st.session_state.signals['result'] == "LOSS").mean())
@@ -483,87 +174,19 @@ if st.button("Run Backtest", key="run_backtest") and not st.session_state.signal
     st.write("Average pips per WIN:", st.session_state.signals.loc[st.session_state.signals['result']=="WIN", 'pips'].mean())
     st.write("Average pips per LOSS:", st.session_state.signals.loc[st.session_state.signals['result']=="LOSS", 'pips'].mean())
     st.write("Net average pips per trade:", st.session_state.signals['pips'].mean())
-# --- Manual signal input form ---
-# ---- Manual signal input form ----
-with st.form("signal_form_manuel"):
-    date = st.date_input("Signal Date")
-    signal = st.selectbox("Signal", ["BUY", "SELL"])
-    pair = st.selectbox("Pair", ["EURUSD", "USDJPY", "GBPUSD", "XAUUSD"])
-    stop_loss = st.number_input("Stop Loss", value=0.0)
-    take_profit = st.number_input("Take Profit", value=0.0)
-    submitted = st.form_submit_button("Add Signal", key="add_signal")
 
-# ---- Run Backtest button ----
-# ---- Run Backtest button ----
-if st.button("Run Backtest", key="run_backtest_main") and not st.session_state.signals.empty:
-    # backtest code goes here
-    # (this is the same logic you already have for WIN/LOSS/HOLD checks)
-
-    # Temporary placeholder so Python is happy
-    st.write("Backtest running...")
-
-from datetime import timedelta
-
-def calculate_pips(entry, exit, pair, direction):
-    if "JPY" in pair:
-        pip_size = 0.01
-    elif "XAU" in pair or "GOLD" in pair:
-        pip_size = 0.1
-    else:
-        pip_size = 0.0001
-
-    if direction == "BUY":
-        diff = exit - entry
-    else:  # SELL
-        diff = entry - exit
-
-    return diff / pip_size
-
-
-def run_backtest(signals, price_data):
-    wins, losses, holds = [], [], []
-
-    for sig in signals:
-        date = sig["date"]
-        pair = sig["pair"]
-        signal = sig["signal"]
-        stop_loss = sig["stop_loss"]
-
-        if date not in price_data[pair]:
-            continue
-
-        entry_price = price_data[pair][date]["close"]
-        next_day = price_data[pair].get(date + timedelta(days=1))
-        if not next_day:
-            continue
-
-        if signal == "BUY":
-            if next_day["low"] <= stop_loss:
-                pips = calculate_pips(entry_price, stop_loss, pair, "BUY")
-                losses.append(abs(pips))
-            else:
-                pips = calculate_pips(entry_price, next_day["close"], pair, "BUY")
-                wins.append(pips)
-
-        elif signal == "SELL":
-            if next_day["high"] >= stop_loss:
-                pips = calculate_pips(entry_price, stop_loss, pair, "SELL")
-                losses.append(abs(pips))
-            else:
-                pips = calculate_pips(entry_price, next_day["close"], pair, "SELL")
-                wins.append(pips)
+    # Guidance Layer: Signal vs News Sentiment
+    if articles and not st.session_state.signals.empty:
+        latest_signal = st.session_state.signals.iloc[-1]
+        dominant_sentiment = sentiment_counts.idxmax()
+        st.subheader("Signal vs News Sentiment")
+        st.write(f"Your latest signal: {latest_signal['signal']} on {latest_signal['pair']}")
+        st.write(f"Dominant news sentiment: {dominant_sentiment}")
+        if latest_signal['signal'] in dominant_sentiment:
+            st.success("✅ Your signal aligns with current news sentiment.")
         else:
-            holds.append(0)
+            st.warning("⚠️ Your signal is opposite to dominant news sentiment. Trade cautiously.")
 
-    total_trades = len(wins) + len(losses) + len(holds)
-
-    stats = {
-        "win_rate": len(wins)/total_trades if total_trades else 0,
-        "loss_rate": len(losses)/total_trades if total_trades else 0,
-        "hold_rate": len(holds)/total_trades if total_trades else 0,
-        "avg_win_pips": sum(wins)/len(wins) if wins else 0,
-        "avg_loss_pips": sum(losses)/len(losses) if losses else 0,
-        "net_avg_pips": (sum(wins) - sum(losses))/total_trades if total_trades else 0
-    }
-
-    return stats
+    # Performance Chart: cumulative pips
+    st.subheader("Performance Chart")
+    st.line_chart(st.session_state.signals['pips'].cumsum())
