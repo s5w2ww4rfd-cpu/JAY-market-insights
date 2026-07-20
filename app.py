@@ -200,4 +200,4 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
                         break
                     elif low <= row['stop_loss']:
                         outcome, days_taken = "LOSS", i
-                        pip_value = pip_difference(row['pair'],
+                        pip_value = pip_difference(row['pair'], entry_price,
