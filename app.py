@@ -1,4 +1,4 @@
-import pandas as pd
+rt pandas as pd
 from newsapi import NewsApiClient
 from transformers import pipeline
 import streamlit as st
