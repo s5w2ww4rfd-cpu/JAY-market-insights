@@ -1,33 +1,25 @@
-rt pandas as pd
-from newsapi import NewsApiClient
-from transformers import pipeline
 import streamlit as st
-import datetime
-import yfinance as yf
+import pandas as pd
+from datetime import datetime   # required for datetime(...)
 
-# Set page config
-st.set_page_config(page_title="JAY Market Insights", layout="wide")
-
-# Title and description
-st.title("📊 JAY Market Insights")
-st.markdown("Real-time sentiment analysis of market news for trading decisions")
-
-# Initialize sentiment model
-@st.cache_resource
-def load_model():
-    return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
-
-sentiment_model = load_model()
+# Jay Market Insights - initial price data
 price_data = {
-    "XAUUSD": {
-        datetime(2026, 7, 20): {"close": 4000, "low": 3995, "high": 4010},
-        datetime(2026, 7, 21): {"close": 4008, "low": 4000, "high": 4015}
-    },
-    "USDJPY": {
-        datetime(2026, 7, 20): {"close": 162.30, "low": 162.00, "high": 162.50},
-        datetime(2026, 7, 21): {"close": 162.80, "low": 162.20, "high": 163.00}
-    }
+    datetime(2026, 7, 20): {"close": 4000, "low": 3995, "high": 4010},
+    datetime(2026, 7, 21): {"close": 4020, "low": 4010, "high": 4035},
+    datetime(2026, 7, 22): {"close": 3985, "low": 3970, "high": 4000},
+    datetime(2026, 7, 23): {"close": 4015, "low": 4000, "high": 4030},
+    datetime(2026, 7, 24): {"close": 3990, "low": 3980, "high": 4005},
 }
+
+# Convert dictionary to DataFrame
+df = pd.DataFrame.from_dict(price_data, orient="index")
+df.index.name = "Date"
+
+# Jay Market Insights App UI
+st.title("📊 Jay Market Insights")
+st.subheader("Raw Price Data")
+st.dataframe(df, use_container_width=True)
+
 
 # Function to check if market is open
 def market_open_now():
