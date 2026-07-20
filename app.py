@@ -11,25 +11,30 @@ NEWS_URL = "https://newsapi.org/v2/everything"
 def pip_difference(pair, entry, exit):
     if "JPY" in pair:
         return (exit - entry) * 100   # 1 pip = 0.01
-    elif "XAU" in pair:
+    elif "XAU" in pair or "BTC" in pair:
         return exit - entry           # treat 1 unit = 1 pip
     else:
         return (exit - entry) * 10000 # 1 pip = 0.0001
 
 # --- Market status helper ---
-def market_open_now():
+def market_open(pair):
     now = datetime.utcnow()
     weekday = now.weekday()  # 0=Monday, 6=Sunday
     hour = now.hour
-    return not ((weekday == 5 and hour >= 22) or (weekday == 6 and hour < 22))
+
+    if pair == "BTCUSD":
+        return True  # Bitcoin trades 24/7
+    else:
+        # Forex closes Friday 22:00 UTC, opens Sunday 22:00 UTC
+        return not ((weekday == 5 and hour >= 22) or (weekday == 6 and hour < 22))
 
 # --- News fetch + sentiment ---
-def fetch_news(query="forex OR EURUSD OR USDJPY OR GBPUSD OR XAUUSD"):
+def fetch_news(query="forex OR EURUSD OR USDJPY OR GBPUSD OR XAUUSD OR BTCUSD OR bitcoin OR gold"):
     params = {
         "q": query,
         "language": "en",
         "sortBy": "publishedAt",
-        "pageSize": 10,
+        "pageSize": 15,
         "apiKey": API_KEY
     }
     response = requests.get(NEWS_URL, params=params)
@@ -39,38 +44,59 @@ def fetch_news(query="forex OR EURUSD OR USDJPY OR GBPUSD OR XAUUSD"):
         return []
 
 def analyze_sentiment(headline):
-    headline = headline.lower()
-    if any(word in headline for word in ["buy", "bullish", "positive", "upside"]):
-        return "BUY"
-    elif any(word in headline for word in ["sell", "bearish", "negative", "downside"]):
-        return "SELL"
+    text = headline.lower()
+    sentiment = "Neutral"
+    if any(word in text for word in ["buy", "bullish", "positive", "upside", "long"]):
+        sentiment = "BUY"
+    elif any(word in text for word in ["sell", "bearish", "negative", "downside", "short"]):
+        sentiment = "SELL"
+
+    # Map to specific pairs
+    if "eurusd" in text or "euro" in text:
+        pair = "EURUSD"
+    elif "usdjpy" in text or "yen" in text:
+        pair = "USDJPY"
+    elif "gbpusd" in text or "pound" in text or "sterling" in text:
+        pair = "GBPUSD"
+    elif "gold" in text or "xau" in text:
+        pair = "XAUUSD"
+    elif "bitcoin" in text or "btc" in text:
+        pair = "BTCUSD"
     else:
-        return "Neutral"
+        pair = "General"
+
+    return sentiment, pair
 
 # --- Streamlit UI ---
 st.title("📊 Jay Market Insights")
-st.subheader("Market Status")
-st.write("Market Open" if market_open_now() else "Market Closed")
+
+# Market Status per Pair
+st.subheader("Market Status by Pair")
+for pair in ["EURUSD", "USDJPY", "GBPUSD", "XAUUSD", "BTCUSD"]:
+    status = "Open" if market_open(pair) else "Closed"
+    st.write(f"{pair}: Market {status}")
 
 # Live News Sentiment
-st.subheader("📰 Live Forex News Sentiment")
+st.subheader("📰 Live Forex & Crypto News Sentiment")
 articles = fetch_news()
 data = []
 if articles:
     for art in articles:
-        sentiment = analyze_sentiment(art["title"])
+        sentiment, pair = analyze_sentiment(art["title"])
         data.append({
             "headline": art["title"],
             "source": art["source"]["name"],
             "published": art["publishedAt"],
+            "pair": pair,
             "sentiment": sentiment
         })
     df_news = pd.DataFrame(data)
     st.dataframe(df_news, use_container_width=True)
 
-    # Sentiment Distribution Chart (bar chart instead of pie)
-    sentiment_counts = df_news['sentiment'].value_counts()
-    st.bar_chart(sentiment_counts)
+    # Sentiment Distribution Chart (per pair)
+    pair_sentiment = df_news.groupby("pair")["sentiment"].value_counts().unstack().fillna(0)
+    st.subheader("Sentiment Distribution by Pair")
+    st.bar_chart(pair_sentiment)
 else:
     st.write("No news available right now.")
 
@@ -82,7 +108,7 @@ timeframe = st.selectbox("Select timeframe", ["1d", "15m", "5m"], index=0)
 with st.form("signal_form"):
     date = st.date_input("Signal Date")
     signal = st.selectbox("Signal", ["BUY", "SELL"])
-    pair = st.selectbox("Pair", ["EURUSD", "USDJPY", "GBPUSD", "XAUUSD"])
+    pair = st.selectbox("Pair", ["EURUSD", "USDJPY", "GBPUSD", "XAUUSD", "BTCUSD"])
     stop_loss = st.number_input("Stop Loss", value=0.0)
     take_profit = st.number_input("Take Profit", value=0.0)
     submitted = st.form_submit_button("Add Signal")
@@ -107,7 +133,8 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
         "EURUSD": "EURUSD=X",
         "USDJPY": "USDJPY=X",
         "GBPUSD": "GBPUSD=X",
-        "XAUUSD": "GC=F"
+        "XAUUSD": "GC=F",
+        "BTCUSD": "BTC-USD"
     }
     data = {}
     for pair, ticker in pairs.items():
@@ -173,16 +200,4 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
 
     # Guidance Layer: Signal vs News Sentiment
     if articles and not st.session_state.signals.empty:
-        latest_signal = st.session_state.signals.iloc[-1]
-        dominant_sentiment = sentiment_counts.idxmax()
-        st.subheader("Signal vs News Sentiment")
-        st.write(f"Your latest signal: {latest_signal['signal']} on {latest_signal['pair']}")
-        st.write(f"Dominant news sentiment: {dominant_sentiment}")
-        if latest_signal['signal'] == dominant_sentiment:
-            st.success("✅ Your signal aligns with current news sentiment.")
-        else:
-            st.warning("⚠️ Your signal is opposite to dominant news sentiment. Trade cautiously.")
-
-    # Performance Chart: cumulative pips
-    st.subheader("Performance Chart")
-    st.line_chart(st.session_state.signals['pips'].cumsum())
+        latest_signal = st.session_state
