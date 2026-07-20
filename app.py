@@ -268,10 +268,11 @@ try:
     # Display as beautiful table
     st.subheader("📰 Latest Market News & Trading Signals")
     st.dataframe(df, use_container_width=True)
-if  st.button("Run Backtest", key="run_backtest_main"):
+if st.button("Run Backtest", key="run_backtest_main"):
     stats = run_backtest(st.session_state.signals, price_data)
     st.write("Backtest Statistics")
     st.write(stats)
+
     # Show statistics
     st.subheader("📈 Sentiment Summary")
     col1, col2, col3 = st.columns(3)
