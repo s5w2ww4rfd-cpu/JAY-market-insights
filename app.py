@@ -255,9 +255,10 @@ try:
     df["Current Price"] = df["Suggested Pairs"].apply(get_first_pair_price)
     
     # Calculate stop loss and take profit with improved rounding
-    df["Stop Loss"], df["Take Profit"] = zip(*df.apply(
+df["Stop Loss"], df["Take Profit"] = zip(*df.apply(
     lambda row: get_trade_levels(row),
-    axis=1))
+    axis=1
+))
   
     
     # Format numeric columns for display
