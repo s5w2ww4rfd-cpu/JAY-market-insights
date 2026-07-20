@@ -20,17 +20,14 @@ st.title("📊 Jay Market Insights")
 st.subheader("Raw Price Data")
 st.dataframe(df, use_container_width=True)
 
-
 # Function to check if market is open
 def market_open_now():
-    now = datetime.datetime.utcnow()
+    now = datetime.utcnow()
     weekday = now.weekday()  # 0=Monday, 6=Sunday
     hour = now.hour
     # Forex closes Friday 22:00 UTC, opens Sunday 22:00 UTC
-    returnnot (weekday == 5 and hour >= 22 or weekday == 6 and hour < 22
-
-# Function to map sentiment to trading pairs
-def map_to_pairs(headline, result):
+    return not ((weekday == 5 and hour >= 22) or (weekday == 6 and hour < 22))
+ map_to_pairs(headline, result):
     label = result[0]['label'].upper()
     pairs_map = {
         "POSITIVE": ["EURUSD", "GBPUSD", "XAUUSD"],
