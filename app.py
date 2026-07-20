@@ -268,17 +268,28 @@ try:
 st.subheader("📰 Latest Market")
 st.dataframe(df, use_container_width=True)
 
+# Backtest button
 if st.button("Run Backtest", key="run_backtest_main"):
     stats = run_backtest(st.session_state.signals, price_data)
     st.write("Backtest Statistics")
     st.write(stats)
-  # Show statistics
-    st.subheader("📈 Sentiment Summary")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        positive = len(df[df['Sentiment'] == 'POSITIVE'])
-        st.metric("🟢 Buy Signals", positive)
+
+# Show statistics
+st.subheader("📈 Sentiment Summary")
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    positive = len(df[df['Sentiment'] == 'positive'])
+    st.metric("🟢 Buy Signals", positive)
+
+with col2:
+    negative = len(df[df['Sentiment'] == 'negative'])
+    st.metric("🔴 Sell Signals", negative)
+
+with col3:
+    neutral = len(df[df['Sentiment'] == 'neutral'])
+    st.metric("⚪ Neutral Signals", neutral)
+
     
     with col2:
         negative = len(df[df['Sentiment'] == 'NEGATIVE'])
