@@ -21,7 +21,6 @@ def market_open(pair):
     now = datetime.utcnow()
     weekday = now.weekday()  # 0=Monday, 6=Sunday
     hour = now.hour
-
     if pair == "BTCUSD":
         return True  # Bitcoin trades 24/7
     else:
@@ -50,8 +49,6 @@ def analyze_sentiment(headline):
         sentiment = "BUY"
     elif any(word in text for word in ["sell", "bearish", "negative", "downside", "short"]):
         sentiment = "SELL"
-
-    # Map to specific pairs
     if "eurusd" in text or "euro" in text:
         pair = "EURUSD"
     elif "usdjpy" in text or "yen" in text:
@@ -64,7 +61,6 @@ def analyze_sentiment(headline):
         pair = "BTCUSD"
     else:
         pair = "General"
-
     return sentiment, pair
 
 # --- Streamlit UI ---
@@ -93,7 +89,7 @@ if articles:
     df_news = pd.DataFrame(data)
     st.dataframe(df_news, use_container_width=True)
 
-    # Sentiment Distribution Chart (per pair)
+    # Sentiment Distribution Chart
     pair_sentiment = df_news.groupby("pair")["sentiment"].value_counts().unstack().fillna(0)
     st.subheader("Sentiment Distribution by Pair")
     st.bar_chart(pair_sentiment)
@@ -114,7 +110,6 @@ if articles:
             df_price = yf.download(ticker_map[pair], period="1d", interval="15m")
             if not df_price.empty:
                 current_price = df_price["Close"].iloc[-1]
-                # Simple SL/TP logic: 1% for FX, 2% for BTC
                 if pair == "BTCUSD":
                     sl = current_price * (0.98 if sentiment == "BUY" else 1.02)
                     tp = current_price * (1.02 if sentiment == "BUY" else 0.98)
@@ -200,4 +195,12 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
                         break
                     elif low <= row['stop_loss']:
                         outcome, days_taken = "LOSS", i
-                        pip_value = pip_difference(row['pair'], entry_price,
+                        pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
+                        break
+                elif row['signal'] == "SELL":
+                    if low <= row['take_profit']:
+                        outcome, days_taken = "WIN", i
+                        pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
+                        break
+                    elif high >= row['stop_loss']:
+                        outcome, days_taken =
