@@ -272,7 +272,6 @@ if st.button("Run Backtest", key="run_backtest_main"):
     stats = run_backtest(st.session_state.signals, price_data)
     st.write("Backtest Statistics")
     st.write(stats)
-
     # Show statistics
     st.subheader("📈 Sentiment Summary")
     col1, col2, col3 = st.columns(3)
