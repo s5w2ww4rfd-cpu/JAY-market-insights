@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 import pandas as pd
 from datetime import datetime   # required for datetime(...)
 
@@ -27,7 +27,7 @@ def market_open_now():
     weekday = now.weekday()  # 0=Monday, 6=Sunday
     hour = now.hour
     # Forex closes Friday 22:00 UTC, opens Sunday 22:00 UTC
-    return not (weekday == 5 and hour >= 22 or weekday == 6 and hour < 22)
+    returnnot (weekday == 5 and hour >= 22 or weekday == 6 and hour < 22)
 
 # Function to map sentiment to trading pairs
 def map_to_pairs(headline, result):
