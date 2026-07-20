@@ -97,6 +97,42 @@ if articles:
     pair_sentiment = df_news.groupby("pair")["sentiment"].value_counts().unstack().fillna(0)
     st.subheader("Sentiment Distribution by Pair")
     st.bar_chart(pair_sentiment)
+
+    # Suggested Signals from News
+    st.subheader("📌 Suggested Signals from News")
+    suggested_signals = []
+    ticker_map = {
+        "EURUSD": "EURUSD=X",
+        "USDJPY": "USDJPY=X",
+        "GBPUSD": "GBPUSD=X",
+        "XAUUSD": "GC=F",
+        "BTCUSD": "BTC-USD"
+    }
+    for art in articles:
+        sentiment, pair = analyze_sentiment(art["title"])
+        if pair in ticker_map and sentiment in ["BUY", "SELL"]:
+            df_price = yf.download(ticker_map[pair], period="1d", interval="15m")
+            if not df_price.empty:
+                current_price = df_price["Close"].iloc[-1]
+                # Simple SL/TP logic: 1% for FX, 2% for BTC
+                if pair == "BTCUSD":
+                    sl = current_price * (0.98 if sentiment == "BUY" else 1.02)
+                    tp = current_price * (1.02 if sentiment == "BUY" else 0.98)
+                else:
+                    sl = current_price * (0.99 if sentiment == "BUY" else 1.01)
+                    tp = current_price * (1.01 if sentiment == "BUY" else 0.99)
+                suggested_signals.append({
+                    "pair": pair,
+                    "signal": sentiment,
+                    "entry": round(current_price, 5),
+                    "stop_loss": round(sl, 5),
+                    "take_profit": round(tp, 5),
+                    "headline": art["title"]
+                })
+    if suggested_signals:
+        st.dataframe(pd.DataFrame(suggested_signals), use_container_width=True)
+    else:
+        st.write("No actionable signals from news right now.")
 else:
     st.write("No news available right now.")
 
@@ -164,40 +200,4 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
                         break
                     elif low <= row['stop_loss']:
                         outcome, days_taken = "LOSS", i
-                        pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
-                        break
-                elif row['signal'] == "SELL":
-                    if low <= row['take_profit']:
-                        outcome, days_taken = "WIN", i
-                        pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
-                        break
-                    elif high >= row['stop_loss']:
-                        outcome, days_taken = "LOSS", i
-                        pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
-                        break
-
-            results.append(outcome)
-            days_to_result.append(days_taken)
-            pip_results.append(pip_value)
-        else:
-            results.append("NO DATA")
-            days_to_result.append(None)
-            pip_results.append(0)
-
-    st.session_state.signals['result'] = results
-    st.session_state.signals['days_to_result'] = days_to_result
-    st.session_state.signals['pips'] = pip_results
-
-    st.write("Backtest Results", st.session_state.signals)
-
-    st.subheader("Backtest Statistics")
-    st.write("Win rate:", (st.session_state.signals['result'] == "WIN").mean())
-    st.write("Loss rate:", (st.session_state.signals['result'] == "LOSS").mean())
-    st.write("Hold rate:", (st.session_state.signals['result'] == "HOLD").mean())
-    st.write("Average pips per WIN:", st.session_state.signals.loc[st.session_state.signals['result']=="WIN", 'pips'].mean())
-    st.write("Average pips per LOSS:", st.session_state.signals.loc[st.session_state.signals['result']=="LOSS", 'pips'].mean())
-    st.write("Net average pips per trade:", st.session_state.signals['pips'].mean())
-
-    # Guidance Layer: Signal vs News Sentiment
-    if articles and not st.session_state.signals.empty:
-        latest_signal = st.session_state
+                        pip_value = pip_difference(row['pair'],
