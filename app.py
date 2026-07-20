@@ -251,28 +251,31 @@ else:
             first_pair = pairs[0]
             return get_current_price(first_pair)
         return 0
-
+# Current price
 df["Current Price"] = df["Suggested Pairs"].apply(get_first_pair_price)
-    
-    # Calculate stop loss and take profit with improved rounding
+
+# Calculate stop loss and take profit with improved rounding
 df["Stop Loss"], df["Take Profit"] = zip(*df.apply(
     lambda row: get_trade_levels(row),
     axis=1
 ))
-  
-    
-    # Format numeric columns for display
-    df["Current Price"] = df["Current Price"].apply(lambda x: f"{x:.5f}" if x else "N/A")
-    df["Stop Loss"] = df["Stop Loss"].apply(lambda x: f"{x:.5f}" if x else "N/A")
-    df["Take Profit"] = df["Take Profit"].apply(lambda x: f"{x:.5f}" if x else "N/A")
+
+# Format numeric columns for display
+df["Current Price"] = df["Current Price"].apply(lambda x: f"{x:.5f}" if x else "N/A")
+df["Stop Loss"] = df["Stop Loss"].apply(lambda x: f"{x:.5f}" if x else "N/A")
+df["Take Profit"] = df["Take Profit"].apply(lambda x: f"{x:.5f}" if x else "N/A")
+
 # Display as beautiful table
-st.subheader("📰 Latest Market")
+st.subheader("📈 Latest Market")
 st.dataframe(df, use_container_width=True)
 
 # Backtest button
-if st.button("Run Backtest", key="run_backtest_main"):
+if st.button("Run Backtest", key="run_backtest_"):
     stats = run_backtest(st.session_state.signals, price_data)
-    st.write("Backtest Statistics") 
+    st.write("Backtest Statistics")
+    st.write(stats)
+
+
     st.write(stats)
 
 # Show statistics
