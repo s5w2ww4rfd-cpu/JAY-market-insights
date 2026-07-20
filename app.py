@@ -18,6 +18,16 @@ def load_model():
     return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
 
 sentiment_model = load_model()
+price_data = {
+    "XAUUSD": {
+        datetime(2026, 7, 20): {"close": 4000, "low": 3995, "high": 4010},
+        datetime(2026, 7, 21): {"close": 4008, "low": 4000, "high": 4015}
+    },
+    "USDJPY": {
+        datetime(2026, 7, 20): {"close": 162.30, "low": 162.00, "high": 162.50},
+        datetime(2026, 7, 21): {"close": 162.80, "low": 162.20, "high": 163.00}
+    }
+}
 
 # Function to check if market is open
 def market_open_now():
@@ -258,6 +268,10 @@ try:
     # Display as beautiful table
     st.subheader("📰 Latest Market News & Trading Signals")
     st.dataframe(df, use_container_width=True)
+if st.button("Run Backtest", key="run_backtest_main"):
+    stats = run_backtest(st.session_state.signals, price_data)
+    st.write("Backtest Statistics")
+    st.write(stats)
 
     # Show statistics
     st.subheader("📈 Sentiment Summary")
@@ -480,3 +494,69 @@ if st.button("Run Backtest", key="run_backtest_main") and not st.session_state.s
 
     # Temporary placeholder so Python is happy
     st.write("Backtest running...")
+
+from datetime import timedelta
+
+def calculate_pips(entry, exit, pair, direction):
+    if "JPY" in pair:
+        pip_size = 0.01
+    elif "XAU" in pair or "GOLD" in pair:
+        pip_size = 0.1
+    else:
+        pip_size = 0.0001
+
+    if direction == "BUY":
+        diff = exit - entry
+    else:  # SELL
+        diff = entry - exit
+
+    return diff / pip_size
+
+
+def run_backtest(signals, price_data):
+    wins, losses, holds = [], [], []
+
+    for sig in signals:
+        date = sig["date"]
+        pair = sig["pair"]
+        signal = sig["signal"]
+        stop_loss = sig["stop_loss"]
+
+        if date not in price_data[pair]:
+            continue
+
+        entry_price = price_data[pair][date]["close"]
+        next_day = price_data[pair].get(date + timedelta(days=1))
+        if not next_day:
+            continue
+
+        if signal == "BUY":
+            if next_day["low"] <= stop_loss:
+                pips = calculate_pips(entry_price, stop_loss, pair, "BUY")
+                losses.append(abs(pips))
+            else:
+                pips = calculate_pips(entry_price, next_day["close"], pair, "BUY")
+                wins.append(pips)
+
+        elif signal == "SELL":
+            if next_day["high"] >= stop_loss:
+                pips = calculate_pips(entry_price, stop_loss, pair, "SELL")
+                losses.append(abs(pips))
+            else:
+                pips = calculate_pips(entry_price, next_day["close"], pair, "SELL")
+                wins.append(pips)
+        else:
+            holds.append(0)
+
+    total_trades = len(wins) + len(losses) + len(holds)
+
+    stats = {
+        "win_rate": len(wins)/total_trades if total_trades else 0,
+        "loss_rate": len(losses)/total_trades if total_trades else 0,
+        "hold_rate": len(holds)/total_trades if total_trades else 0,
+        "avg_win_pips": sum(wins)/len(wins) if wins else 0,
+        "avg_loss_pips": sum(losses)/len(losses) if losses else 0,
+        "net_avg_pips": (sum(wins) - sum(losses))/total_trades if total_trades else 0
+    }
+
+    return stats
