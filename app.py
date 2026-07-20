@@ -211,7 +211,7 @@ else:
     st.warning("🔴 **FOREX MARKET IS CLOSED**")
 
 # Connect with your API key
-try:
+
     newsapi = NewsApiClient(api_key="f8665eb595e943a7bbbe1e05ecf32730")
 
     # Pull latest financial headlines
