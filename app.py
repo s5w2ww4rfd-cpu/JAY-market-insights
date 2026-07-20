@@ -263,17 +263,16 @@ try:
     # Format numeric columns for display
     df["Current Price"] = df["Current Price"].apply(lambda x: f"{x:.5f}" if x else "N/A")
     df["Stop Loss"] = df["Stop Loss"].apply(lambda x: f"{x:.5f}" if x else "N/A")
-    df["Take Profit"] = df["Take Profit"].apply(lambda x: f"{x:.5f}" if x else "N/A")
+    df["Take Profit"] = df["Take Profit"].apply(lambda x: f"{x:.5f}" if x else "N/
+# Display as beautiful table
+st.subheader("📰 Latest Market")
+st.dataframe(df, use_container_width=True)
 
-    # Display as beautiful table
-    st.subheader("📰 Latest Market News & Trading Signals")
-    st.dataframe(df, use_container_width=True)
 if st.button("Run Backtest", key="run_backtest_main"):
     stats = run_backtest(st.session_state.signals, price_data)
     st.write("Backtest Statistics")
     st.write(stats)
-
-    # Show statistics
+  # Show statistics
     st.subheader("📈 Sentiment Summary")
     col1, col2, col3 = st.columns(3)
     
