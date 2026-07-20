@@ -367,16 +367,15 @@ with col3:
                 
                 with col4:
                     avg_pips = backtest_df['pips'].mean()
-                    st.metric("Avg Pips/Trade", f"{avg_pips:.2f}")
-            else:
-                st.error("No backtest data available")
+# Backtest button
+if st.button("Run Backtest", key="run_backtest_"):
+    try:
+        stats = run_backtest(st.session_state.signals, price_data)
+        st.write("Backtest Statistics")
+        st.write(stats)
+    except Exception as e:
+        st.error(f"Backtest failed: {e}")
 
-except Exception as e:
-    st.error(f"Error: {e}")
-    st.info("Please check your API key is correct")
-import streamlit as st
-import yfinance as yf
-import pandas as pd
 
 # --- Helper: pip calculation ---
 def pip_difference(pair, entry, exit):
