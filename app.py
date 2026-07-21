@@ -130,8 +130,7 @@ if articles:
         st.write("No actionable signals from news right now.")
 else:
     st.write("No news available right now.")
-
-# --- Strategy Backtest Results ---
+    # --- Strategy Backtest Results ---
 st.subheader("Strategy Backtest Results")
 
 timeframe = st.selectbox("Select timeframe", ["1d", "15m", "5m"], index=0)
@@ -202,5 +201,3 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
                         outcome, days_taken = "WIN", i
                         pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
                         break
-                    elif high >= row['stop_loss']:
-                        outcome, days_taken =
