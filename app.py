@@ -267,3 +267,73 @@ for _, row in st.session_state.signals.iterrows():
         results.append("NO DATA")
         days_to_result.append(None)
         pip_results.append(0)
+import pandas as pd
+import pandas_ta as ta
+import ccxt
+import time
+
+exchange = ccxt.binance()  # data only
+
+pairs = ["EUR/USDT", "GBP/USDT", "USD/JPY"]
+
+def fetch_data(pair, timeframe="15m", limit=200):
+    ohlcv = exchange.fetch_ohlcv(pair, timeframe=timeframe, limit=limit)
+    df = pd.DataFrame(ohlcv, columns=["time","open","high","low","close","volume"])
+    return df
+
+def generate_signal(df):
+    df["ema50"] = ta.ema(df["close"], length=50)
+    df["ema200"] = ta.ema(df["close"], length=200)
+    df["rsi"] = ta.rsi(df["close"], length=14)
+    df["atr"] = ta.atr(df["high"], df["low"], df["close"], length=14)
+
+    last = df.iloc[-1]
+
+    reason = []
+    confidence = "Low"
+
+    if last["ema50"] > last["ema200"]:
+        reason.append("Trend is bullish (EMA50 > EMA200)")
+    elif last["ema50"] < last["ema200"]:
+        reason.append("Trend is bearish (EMA50 < EMA200)")
+
+    if last["rsi"] > 55:
+        reason.append("RSI shows buying strength")
+    elif last["rsi"] < 45:
+        reason.append("RSI shows selling pressure")
+
+    if last["atr"] > df["close"].mean() * 0.001:  # volatility filter
+        reason.append("ATR shows sufficient volatility")
+
+    # Confidence scoring
+    if len(reason) >= 3:
+        confidence = "High"
+    elif len(reason) == 2:
+        confidence = "Medium"
+
+    if last["ema50"] > last["ema200"] and last["rsi"] > 55:
+        return "BUY", last["close"], last["atr"], reason, confidence
+    elif last["ema50"] < last["ema200"] and last["rsi"] < 45:
+        return "SELL", last["close"], last["atr"], reason, confidence
+    else:
+        return None, None, None, None, None
+
+def guide_output(pair, signal, entry, atr, reason, confidence):
+    if signal:
+        stop_loss = atr * 1.5
+        take_profit = stop_loss * 2
+        print(f"Pair: {pair}")
+        print(f"Signal: {signal}")
+        print(f"Entry: {entry:.5f}")
+        print(f"Stop Loss: {entry - stop_loss if signal=='BUY' else entry + stop_loss:.5f}")
+        print(f"Take Profit: {entry + take_profit if signal=='BUY' else entry - take_profit:.5f}")
+        print(f"Reason: {', '.join(reason)}")
+        print(f"Confidence: {confidence}")
+        print("-"*40)
+
+while True:
+    for pair in pairs:
+        df = fetch_data(pair)
+        signal, entry, atr, reason, confidence = generate_signal(df)
+        guide_output(pair, signal, entry, atr, reason, confidence)
+    time.sleep(60)  # update every minute
