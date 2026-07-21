@@ -268,7 +268,7 @@ for _, row in st.session_state.signals.iterrows():
         days_to_result.append(None)
         pip_results.append(0)
 import pandas as pd
-import pandas_ta as ta
+import pandas as pd
 import ccxt
 import time
 
@@ -276,19 +276,41 @@ exchange = ccxt.binance()  # data only
 
 pairs = ["EUR/USDT", "GBP/USDT", "USD/JPY"]
 
+# --- Indicator functions ---
+def EMA(series, period):
+    return series.ewm(span=period, adjust=False).mean()
+
+def RSI(series, period=14):
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+def ATR(high, low, close, period=14):
+    tr = pd.concat([
+        high - low,
+        (high - close.shift()).abs(),
+        (low - close.shift()).abs()
+    ], axis=1).max(axis=1)
+    return tr.rolling(period).mean()
+
+# --- Data fetch ---
 def fetch_data(pair, timeframe="15m", limit=200):
     ohlcv = exchange.fetch_ohlcv(pair, timeframe=timeframe, limit=limit)
     df = pd.DataFrame(ohlcv, columns=["time","open","high","low","close","volume"])
     return df
 
+# --- Signal generation ---
 def generate_signal(df):
-    df["ema50"] = ta.ema(df["close"], length=50)
-    df["ema200"] = ta.ema(df["close"], length=200)
-    df["rsi"] = ta.rsi(df["close"], length=14)
-    df["atr"] = ta.atr(df["high"], df["low"], df["close"], length=14)
+    df["ema50"] = EMA(df["close"], 50)
+    df["ema200"] = EMA(df["close"], 200)
+    df["rsi"] = RSI(df["close"], 14)
+    df["atr"] = ATR(df["high"], df["low"], df["close"], 14)
 
     last = df.iloc[-1]
-
     reason = []
     confidence = "Low"
 
@@ -302,10 +324,9 @@ def generate_signal(df):
     elif last["rsi"] < 45:
         reason.append("RSI shows selling pressure")
 
-    if last["atr"] > df["close"].mean() * 0.001:  # volatility filter
+    if last["atr"] > df["close"].mean() * 0.001:
         reason.append("ATR shows sufficient volatility")
 
-    # Confidence scoring
     if len(reason) >= 3:
         confidence = "High"
     elif len(reason) == 2:
@@ -318,6 +339,7 @@ def generate_signal(df):
     else:
         return None, None, None, None, None
 
+# --- Output ---
 def guide_output(pair, signal, entry, atr, reason, confidence):
     if signal:
         stop_loss = atr * 1.5
@@ -331,6 +353,7 @@ def guide_output(pair, signal, entry, atr, reason, confidence):
         print(f"Confidence: {confidence}")
         print("-"*40)
 
+# --- Main loop ---
 while True:
     for pair in pairs:
         df = fetch_data(pair)
