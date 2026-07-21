@@ -269,12 +269,8 @@ for _, row in st.session_state.signals.iterrows():
         pip_results.append(0)
 import pandas as pd
 import pandas as pd
-import ccxt
 import time
-
-exchange = ccxt.binance()  # data only
-
-pairs = ["EUR/USDT", "GBP/USDT", "USD/JPY"]
+import requests
 
 # --- Indicator functions ---
 def EMA(series, period):
@@ -297,11 +293,30 @@ def ATR(high, low, close, period=14):
     ], axis=1).max(axis=1)
     return tr.rolling(period).mean()
 
-# --- Data fetch ---
-def fetch_data(pair, timeframe="15m", limit=200):
-    ohlcv = exchange.fetch_ohlcv(pair, timeframe=timeframe, limit=limit)
-    df = pd.DataFrame(ohlcv, columns=["time","open","high","low","close","volume"])
-    return df
+# --- Load CSV price data ---
+def fetch_data(csv_file, limit=200):
+    df = pd.read_csv(csv_file)
+    return df.tail(limit)
+
+# --- News API integration ---
+API_KEY = "f8665eb595e943a7bbbe1e05ecf32730"
+
+def fetch_news(pair):
+    # Replace with your actual API endpoint
+    url = f"https://yournewsapi.com/latest?pair={pair}&apikey={API_KEY}"
+    try:
+        response = requests.get(url)
+        data = response.json()
+        return data.get("headlines", [])
+    except:
+        return []
+
+def news_filter(pair):
+    headlines = fetch_news(pair)
+    if headlines:
+        return f"⚠️ News: {headlines[0]}"
+    else:
+        return "No major news detected"
 
 # --- Signal generation ---
 def generate_signal(df):
@@ -339,11 +354,13 @@ def generate_signal(df):
     else:
         return None, None, None, None, None
 
-# --- Output ---
+# --- Output & Logging ---
 def guide_output(pair, signal, entry, atr, reason, confidence):
     if signal:
         stop_loss = atr * 1.5
         take_profit = stop_loss * 2
+        news_info = news_filter(pair)
+
         print(f"Pair: {pair}")
         print(f"Signal: {signal}")
         print(f"Entry: {entry:.5f}")
@@ -351,12 +368,29 @@ def guide_output(pair, signal, entry, atr, reason, confidence):
         print(f"Take Profit: {entry + take_profit if signal=='BUY' else entry - take_profit:.5f}")
         print(f"Reason: {', '.join(reason)}")
         print(f"Confidence: {confidence}")
+        print(f"News Check: {news_info}")
         print("-"*40)
 
+        # Log to CSV
+        log = pd.DataFrame([{
+            "pair": pair,
+            "signal": signal,
+            "entry": entry,
+            "stop_loss": entry - stop_loss if signal=="BUY" else entry + stop_loss,
+            "take_profit": entry + take_profit if signal=="BUY" else entry - take_profit,
+            "reason": "; ".join(reason),
+            "confidence": confidence,
+            "news": news_info
+        }])
+        log.to_csv("trade_signals_log.csv", mode="a", header=False, index=False)
+
 # --- Main loop ---
+pairs = ["EURUSD_15m.csv", "GBPUSD_15m.csv", "USDJPY_15m.csv"]
+
 while True:
-    for pair in pairs:
-        df = fetch_data(pair)
+    for csv_file in pairs:
+        df = fetch_data(csv_file)
+        pair_name = csv_file.replace("_15m.csv", "")
         signal, entry, atr, reason, confidence = generate_signal(df)
-        guide_output(pair, signal, entry, atr, reason, confidence)
+        guide_output(pair_name, signal, entry, atr, reason, confidence)
     time.sleep(60)  # update every minute
