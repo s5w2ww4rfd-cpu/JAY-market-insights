@@ -201,3 +201,26 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
                         outcome, days_taken = "WIN", i
                         pip_value = pip_difference(row['pair'], entry_price, row['take_profit'])
                         break
+                elif high >= row['stop_loss']:
+                    outcome, days_taken = "LOSS", i
+                    pip_value = pip_difference(row['pair'], entry_price, row['stop_loss'])
+                    break
+
+            results.append(outcome)
+            days_to_result.append(days_taken)
+            pip_results.append(pip_value)
+        else:
+            results.append("NO DATA")
+            days_to_result.append(None)
+            pip_results.append(0)
+
+    # Collect results
+    st.session_state.signals["outcome"] = results
+    st.session_state.signals["days_to_result"] = days_to_result
+    st.session_state.signals["pip_result"] = pip_results
+
+    st.write("Backtest Results", st.session_state.signals)
+
+    # Performance chart
+    st.subheader("Performance Chart")
+    st.line_chart(st.session_state.signals["pip_result"].cumsum())
