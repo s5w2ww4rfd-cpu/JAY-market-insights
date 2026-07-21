@@ -224,3 +224,46 @@ if st.button("Run Backtest") and not st.session_state.signals.empty:
     # Performance chart
     st.subheader("Performance Chart")
     st.line_chart(st.session_state.signals["pip_result"].cumsum())
+for _, row in st.session_state.signals.iterrows():
+    pair_data = data.get(row['pair'])
+    if row['date'] in pair_data.index:
+        start_idx = pair_data.index.get_loc(row['date'])
+        end_idx = min(start_idx + lookahead, len(pair_data)-1)
+        window = pair_data.iloc[start_idx:end_idx+1]
+
+        outcome, days_taken, pip_value = "HOLD", None, 0
+        entry_price = pair_data.loc[row['date'], 'Open']
+
+        # 🟩 Inner loop (candles)
+        tp = float(row['take_profit'])
+        sl = float(row['stop_loss'])
+
+        for i, (idx, day) in enumerate(window.iterrows()):
+            high, low = day['High'], day['Low']
+            if row['signal'] == "BUY":
+                if high >= tp:
+                    outcome, days_taken = "WIN", i
+                    pip_value = pip_difference(row['pair'], entry_price, tp)
+                    break
+                elif low <= sl:
+                    outcome, days_taken = "LOSS", i
+                    pip_value = pip_difference(row['pair'], entry_price, sl)
+                    break
+            elif row['signal'] == "SELL":
+                if low <= tp:
+                    outcome, days_taken = "WIN", i
+                    pip_value = pip_difference(row['pair'], entry_price, tp)
+                    break
+                elif high >= sl:
+                    outcome, days_taken = "LOSS", i
+                    pip_value = pip_difference(row['pair'], entry_price, sl)
+                    break
+
+        # 🟨 Append results (still inside outer loop)
+        results.append(outcome)
+        days_to_result.append(days_taken)
+        pip_results.append(pip_value)
+    else:
+        results.append("NO DATA")
+        days_to_result.append(None)
+        pip_results.append(0)
